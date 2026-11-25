@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Audio Visualizer</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/addons/p5.sound.min.js"></script>
+
+    <style>
+        :root {
+            --c1: #7c4dff;
+            --c2: #00e5ff;
+            --glass: rgba(255, 255, 255, 0.06);
+            --border: rgba(255, 255, 255, 0.12);
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #06060f;
+        }
+
+        body {
+            font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+            color: #fff;
+        }
+
+        /* Le canvas p5 reste derrière l'interface */
+        canvas {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+
+        .glass {
+            background: var(--glass);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+        }
+
+        /* ---------- Barre du haut ---------- */
+        #topbar {
+            position: fixed;
+            top: 16px;
+            left: 20px;
+            right: 20px;
+            z-index: 10;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 0.22em;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--c1), var(--c2));
+            box-shadow: 0 0 10px var(--c2);
+        }
+
+        .brand-sub {
+            margin-top: 4px;
+            font-size: 11px;
+            opacity: 0.5;
+        }
+
+        #modes {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            border-radius: 999px;
+        }
+
+        #modes button {
+            border: 0;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        #modes button:hover {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        #modes button.active {
+            color: #fff;
+            background: linear-gradient(135deg, var(--c1), var(--c2));
+            box-shadow: 0 0 16px rgba(0, 229, 255, 0.35);
+        }
+
+        #file-slot {
+            justify-self: end;
+            padding: 6px 10px;
+            border-radius: 999px;
+        }
+
+        /* Le champ de fichier créé par p5 (createFileInput), relooké */
+        #file-slot input[type="file"] {
+            font: inherit;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            max-width: 230px;
+        }
+
+        #file-slot input[type="file"]::file-selector-button {
+            margin-right: 10px;
+            padding: 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #file-slot input[type="file"]::file-selector-button:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        /* ---------- Panneau du bas ---------- */
+        #panel {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            z-index: 10;
+            width: min(720px, 94vw);
+            padding: 14px 20px 16px;
+            border-radius: 20px;
+        }
+
+        .track {
+            margin-bottom: 10px;
+            min-width: 0;
+        }
+
+        #trackName {
+            font-weight: 700;
+            font-size: 15px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #trackSub {
+            margin-top: 2px;
+            font-size: 12px;
+            opacity: 0.55;
+        }
+
+        .transport {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        /* Bouton créé par p5 (createButton) */
+        #playBtn {
+            flex: none;
+            width: 52px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 50%;
+            color: #fff;
+            cursor: pointer;
+            background: linear-gradient(135deg, var(--c1), var(--c2));
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        #playBtn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 0 30px rgba(124, 77, 255, 0.8);
+        }
+
+        #playBtn:active { transform: scale(0.96); }
+
+        #playBtn.playing { box-shadow: 0 0 28px rgba(124, 77, 255, 0.7); }
+
+        .time {
+            flex: none;
+            width: 38px;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            opacity: 0.7;
+        }
+
+        #timeDur { text-align: left; }
+        #timeCur { text-align: right; }
+
+        #progress {
+            flex: 1;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        #progress .bar {
+            width: 100%;
+            height: 5px;
+            border-radius: 3px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.16);
+            transition: height 0.15s;
+        }
+
+        #progress:hover .bar { height: 8px; }
+
+        #progressFill {
+            width: 0;
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--c1), var(--c2));
+        }
+
+        .vol {
+            flex: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0.9;
+        }
+
+        .vol input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 90px;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .vol input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 0 10px var(--c2);
+        }
+
+        .vol input[type="range"]::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border: 0;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 0 10px var(--c2);
+        }
+
+        /* ---------- Petits écrans ---------- */
+        @media (max-width: 700px) {
+            #topbar {
+                grid-template-columns: 1fr;
+                justify-items: center;
+                gap: 8px;
+            }
+            .brand-sub { display: none; }
+            #file-slot { justify-self: center; }
+            .vol input[type="range"] { width: 60px; }
+            .transport { gap: 8px; }
+            #playBtn { width: 46px; height: 46px; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ===== NOUVEAU : interface ===== -->
+    <div id="topbar">
+        <div class="brand">
+            <div class="brand-title"><span class="dot"></span>AUDIO VISUALIZER</div>
+            <div class="brand-sub">1 · 2 · 3 changer de mode — F plein écran — Espace lecture</div>
+        </div>
+
+        <div id="modes" class="glass">
+            <button data-mode="circle" class="active">Cercle</button>
+            <button data-mode="bars">Barres</button>
+            <button data-mode="waves">Vagues</button>
+        </div>
+
+        <!-- Le champ de fichier (createFileInput) est placé ici par p5 -->
+        <div id="file-slot" class="glass"></div>
+    </div>
+
+    <div id="panel" class="glass">
+        <div class="track">
+            <div id="trackName">Aucun fichier chargé</div>
+            <div id="trackSub">Choisissez un fichier audio en haut à droite</div>
+        </div>
+
+        <div class="transport">
+            <!-- Le bouton Play / Pause (createButton) est placé ici par p5 -->
+            <div id="play-slot"></div>
+
+            <span id="timeCur" class="time">0:00</span>
+            <div id="progress" aria-label="Barre de progression">
+                <div class="bar"><div id="progressFill"></div></div>
+            </div>
+            <span id="timeDur" class="time">0:00</span>
+
+            <label class="vol">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/>
+                </svg>
+                <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Volume">
+            </label>
+        </div>
+    </div>
+
+    <script>
+        // ===== VARIABLES EXISTANTES (inchangées) =====
+        let song;
+        let fft;
+        let fileInput;
+        let playButton;
+
+        // ===== NOUVEAU : état général =====
+        let visualMode = "circle";   // "circle", "bars" ou "waves"
+        let modeFade = 1;            // fondu quand on change de mode (0 à 1)
+        let isActive = false;        // true quand la musique est en lecture
+        let lastPlaying = false;     // sert à mettre à jour l'interface seulement si besoin
+        let ui = {};                 // références vers les éléments HTML de l'interface
+
+        // ===== NOUVEAU : analyse audio =====
+        const NUM_BANDS = 96;                        // nombre de bandes de fréquences
+        let bands = new Array(NUM_BANDS).fill(0);    // énergie lissée de chaque bande (0 à 1)
+        let wave = [];                               // forme d'onde (-1 à 1)
+        let bass = 0;          // énergie des basses (0 à 1)
+        let bassSmooth = 0;    // basses lissées
+        let bassAverage = 0;   // moyenne lente, référence pour détecter un battement
+        let beatPulse = 0;     // 1 sur un battement, puis retombe vers 0
+        let lastBeatTime = 0;  // anti double-détection
+        let hueOffset = 0;     // décalage de couleur qui avance à chaque battement
+
+        // ===== NOUVEAU : particules et ondes de choc =====
+        let particles = [];
+        let shockwaves = [];
+        const MAX_PARTICLES = 900;
+
+        // ===== NOUVEAU : icônes du bouton =====
+        const ICON_PLAY = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+        const ICON_PAUSE = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+
+        // ===== NOUVEAU : palette néon (cyan -> violet -> rose -> cyan) =====
+        const PALETTE_STOPS = [[0, 229, 255], [124, 77, 255], [255, 64, 170], [0, 229, 255]];
+
+        function palette(t) {
+            t = ((t % 1) + 1) % 1;
+            const f = t * (PALETTE_STOPS.length - 1);
+            const i = floor(f);
+            const k = f - i;
+            const a = PALETTE_STOPS[i];
+            const b = PALETTE_STOPS[i + 1];
+            return [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+        }
+
+        function cssColor(c, alpha) {
+            return "rgba(" + floor(c[0]) + "," + floor(c[1]) + "," + floor(c[2]) + "," + alpha + ")";
+        }
+
+        function centerY() { return height * 0.45; }
+        function baselineY() { return height * 0.68; }
+        function baseRadius() { return min(width, height) * 0.15; }
+
+        // =====================================================
+        //  SETUP (votre code conservé + interface)
+        // =====================================================
+        function setup() {
+
+            createCanvas(windowWidth, windowHeight);
+
+            fft = new p5.FFT();
+
+            fileInput = createFileInput(handleFile);
+            fileInput.parent("file-slot");               // NOUVEAU : placé dans la barre du haut
+            fileInput.attribute("accept", "audio/*");
+
+            playButton = createButton(ICON_PLAY);
+            playButton.parent("play-slot");              // NOUVEAU : placé dans le panneau du bas
+            playButton.id("playBtn");
+            playButton.attribute("aria-label", "Lecture / Pause");
+            playButton.elt.addEventListener("click", function () {
+                toggleSong();
+                playButton.elt.blur();                   // pour que la touche Espace reste utilisable
+            });
+
+            setupInterface();                            // NOUVEAU
+            outputVolume(0.8);
+        }
+
+        // NOUVEAU : branche le volume, la barre de progression et les modes
+        function setupInterface() {
+
+            ui.trackName = document.getElementById("trackName");
+            ui.trackSub = document.getElementById("trackSub");
+            ui.timeCur = document.getElementById("timeCur");
+            ui.timeDur = document.getElementById("timeDur");
+            ui.progress = document.getElementById("progress");
+            ui.progressFill = document.getElementById("progressFill");
+            ui.volume = document.getElementById("volume");
+
+            ui.volume.addEventListener("input", function () {
+                outputVolume(parseFloat(ui.volume.value));
+            });
+
+            // Clic sur la barre de progression = aller à cet endroit (la lecture reprend à partir de là)
+            ui.progress.addEventListener("click", function (e) {
+                if (!song || !song.isLoaded()) {
+                    return;
+                }
+                const rect = ui.progress.getBoundingClientRect();
+                const ratio = constrain((e.clientX - rect.left) / rect.width, 0, 0.999);
+                userStartAudio();
+                song.jump(ratio * song.duration());
+            });
+
+            document.querySelectorAll("#modes button").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    setMode(btn.dataset.mode);
+                });
+            });
+        }
+
+        // =====================================================
+        //  CHARGEMENT ET LECTURE (votre code conservé)
+        // =====================================================
+        function handleFile(file) {
+
+            if (file.type === "audio") {
+
+                if (song) {
+                    song.stop();
+                }
+
+                // NOUVEAU : on remet les effets à zéro et on affiche le nom du fichier
+                resetVisualState();
+                ui.trackName.textContent = file.name;
+                ui.trackSub.textContent = "Chargement…";
+
+                song = loadSound(file.data, function() {
+                    fft.setInput(song);
+                    ui.trackSub.textContent = "Prêt : appuyez sur lecture";
+                }, function () {
+                    ui.trackSub.textContent = "Erreur : ce fichier n'a pas pu être lu";
+                });
+
+            } else {
+                ui.trackSub.textContent = "Ce fichier n'est pas un fichier audio";
+            }
+        }
+
+        function toggleSong() {
+
+            if (!song || !song.isLoaded()) {
+                return;
+            }
+
+            // NOUVEAU : les navigateurs exigent un clic pour activer le son
+            userStartAudio();
+
+            if (song.isPlaying()) {
+                song.pause();
+            } else {
+                song.play();
+            }
+        }
+
+        function resetVisualState() {
+            particles = [];
+            shockwaves = [];
+            bassAverage = 0;
+            beatPulse = 0;
+        }
+
+        // =====================================================
+        //  BOUCLE PRINCIPALE
+        // =====================================================
+        function draw() {
+
+            const loaded = Boolean(song && song.isLoaded());
+            isActive = loaded && song.isPlaying();
+
+            if (loaded) {
+                analyseAudio();      // NOUVEAU : bandes, basses, battements
+            } else {
+                decayAudio();        // sans musique, les effets s'éteignent doucement
+            }
+
+            modeFade = lerp(modeFade, 1, 0.08);
+
+            drawBackground();        // NOUVEAU : fond lumineux
+
+            // Zoom et léger tremblement synchronisés avec les basses
+            push();
+            const cx = width / 2;
+            const cy = centerY();
+            translate(cx, cy);
+            scale(1 + beatPulse * 0.035 + bassSmooth * 0.02);
+            translate(-cx + random(-1, 1) * beatPulse * 3, -cy + random(-1, 1) * beatPulse * 3);
+
+            drawingContext.globalAlpha = modeFade;
+            if (visualMode === "circle") {
+                drawCircleMode();
+            } else if (visualMode === "bars") {
+                drawBarsMode();
+            } else {
+                drawWavesMode();
+            }
+            drawingContext.globalAlpha = 1;
+
+            drawShockwaves();
+            updateParticles();
+            pop();
+
+            // Flash blanc très léger sur chaque battement
+            if (beatPulse > 0.05) {
+                push();
+                noStroke();
+                fill(255, beatPulse * 14);
+                rect(0, 0, width, height);
+                pop();
+            }
+
+            // Message d'accueil (conservé)
+            if (!loaded) {
+                push();
+                noStroke();
+                fill(255, 150 + 100 * sin(frameCount * 0.04));
+                textSize(22);
+                textAlign(CENTER, CENTER);
+                text("Charge une musique pour commencer", width / 2, centerY());
+                pop();
+            }
+
+            updateInterface();
+        }
+
+        // =====================================================
+        //  ANALYSE AUDIO ET DÉTECTION DES BATTEMENTS
+        // =====================================================
+        function analyseAudio() {
+
+            const spectrum = fft.analyze();
+            wave = fft.waveform();
+
+            // Regroupe les 1024 fréquences en 96 bandes (échelle qui détaille les graves)
+            const usable = spectrum.length * 0.7;
+            for (let i = 0; i < NUM_BANDS; i++) {
+                const a = floor(pow(i / NUM_BANDS, 1.8) * usable);
+                const b = max(a + 1, floor(pow((i + 1) / NUM_BANDS, 1.8) * usable));
+
+                let sum = 0;
+                for (let j = a; j < b; j++) {
+                    sum += spectrum[j];
+                }
+
+                let v = sum / (b - a) / 255;
+                v = min(1, v * (1 + (i / NUM_BANDS) * 0.9));   // compense les aigus plus faibles
+
+                // Montée rapide, descente douce
+                bands[i] = lerp(bands[i], v, v > bands[i] ? 0.6 : 0.15);
+            }
+
+            // Basses et battements
+            bass = fft.getEnergy("bass") / 255;
+            bassSmooth = lerp(bassSmooth, bass, 0.2);
+            bassAverage = lerp(bassAverage, bass, 0.04);
+
+            const now = millis();
+            if (bass > bassAverage * 1.2 + 0.04 && bass > 0.35 && now - lastBeatTime > 220) {
+                onBeat();
+            }
+
+            beatPulse *= 0.9;
+
+            // Petit flux continu de particules quand les basses sont fortes
+            if (isActive) {
+                spawnExplosion(floor(bassSmooth * 2.5), bassSmooth * 0.3);
+            }
+        }
+
+        function decayAudio() {
+            for (let i = 0; i < NUM_BANDS; i++) {
+                bands[i] *= 0.9;
+            }
+            bassSmooth *= 0.9;
+            beatPulse *= 0.9;
+            wave = [];
+        }
+
+        function onBeat() {
+            beatPulse = 1;
+            lastBeatTime = millis();
+            hueOffset += 0.015;
+            shockwaves.push({ r: baseRadius(), a: 1 });
+            spawnExplosion(floor(35 + bass * 55), bass);   // explosion de particules
+        }
+
+        // =====================================================
+        //  FOND LUMINEUX
+        // =====================================================
+        function drawBackground() {
+
+            const ctx = drawingContext;
+
+            // Voile sombre semi-transparent : crée des traînées lumineuses
+            noStroke();
+            fill(6, 6, 18, 60);
+            rect(0, 0, width, height);
+
+            // Trois halos colorés qui se déplacent et grossissent avec les basses
+            const t = frameCount * 0.004;
+            for (let i = 0; i < 3; i++) {
+                const x = width / 2 + cos(t * (1 + i * 0.7) + i * 2) * width * 0.3;
+                const y = height / 2 + sin(t * (1.3 + i * 0.5) + i * 3) * height * 0.25;
+                const rad = max(width, height) * (0.35 + bassSmooth * 0.2);
+                const c = palette(i * 0.33 + t * 0.3 + hueOffset);
+                const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+                g.addColorStop(0, cssColor(c, 0.07 + bassSmooth * 0.16 + beatPulse * 0.08));
+                g.addColorStop(1, cssColor(c, 0));
+                ctx.fillStyle = g;
+                ctx.fillRect(0, 0, width, height);
+            }
+        }
+
+        // =====================================================
+        //  MODE 1 : CERCLE
+        // =====================================================
+        function drawCircleMode() {
+
+            const ctx = drawingContext;
+            const cx = width / 2;
+            const cy = centerY();
+            const baseR = baseRadius();
+            const r = baseR * (1 + bassSmooth * 0.12) + beatPulse * 8;
+            const idle = isActive ? 0 : 1;
+            const breathe = 0.5 + 0.5 * sin(frameCount * 0.04);
+
+            // Halo lumineux derrière le cercle
+            const c0 = palette(hueOffset + frameCount * 0.0008);
+            const glowR = r * (1.5 + bassSmooth * 0.5);
+            const g = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, glowR);
+            g.addColorStop(0, cssColor(c0, 0.30 + beatPulse * 0.35 + idle * breathe * 0.1));
+            g.addColorStop(0.55, cssColor(c0, 0.10));
+            g.addColorStop(1, cssColor(c0, 0));
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(cx, cy, glowR, 0, TWO_PI);
+            ctx.fill();
+
+            push();
+            translate(cx, cy);
+            rotate(frameCount * 0.003);
+
+            // Disque central sombre
+            noStroke();
+            fill(6, 6, 20, 210);
+            circle(0, 0, r * 1.7);
+
+            // Spectre circulaire en miroir : graves en haut, aigus en bas
+            blendMode(ADD);
+            strokeCap(ROUND);
+            const total = NUM_BANDS * 2;
+            for (let k = 0; k < total; k++) {
+                const bi = k < NUM_BANDS ? k : total - 1 - k;
+                const a = (k / total) * TWO_PI - HALF_PI;
+                const ca = cos(a);
+                const sa = sin(a);
+                const wobble = idle * breathe * 6 * (0.5 + 0.5 * sin(k * 0.3 + frameCount * 0.05));
+                const len = 4 + bands[bi] * baseR * 1.1 + wobble;
+                const col = palette(hueOffset + (bi / NUM_BANDS) * 0.8);
+
+                // Halo large puis trait fin lumineux
+                stroke(col[0], col[1], col[2], 45);
+                strokeWeight(7);
+                line(ca * r, sa * r, ca * (r + len), sa * (r + len));
+
+                stroke(col[0], col[1], col[2], 230);
+                strokeWeight(2.5);
+                line(ca * r, sa * r, ca * (r + len), sa * (r + len));
+
+                // Petit reflet vers l'intérieur
+                stroke(col[0], col[1], col[2], 110);
+                strokeWeight(1.5);
+                line(ca * r, sa * r, ca * (r - len * 0.25), sa * (r - len * 0.25));
+            }
+            blendMode(BLEND);
+
+            // Anneau de forme d'onde avec halo
+            if (wave.length > 0) {
+                noFill();
+                stroke(255, 220);
+                strokeWeight(2);
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = cssColor(c0, 0.9);
+                beginShape();
+                for (let i = 0; i < wave.length; i += 4) {
+                    const a = map(i, 0, wave.length, 0, TWO_PI);
+                    const rr = r * 0.7 + wave[i] * baseR * 0.3;
+                    vertex(cos(a) * rr, sin(a) * rr);
+                }
+                endShape(CLOSE);
+                ctx.shadowBlur = 0;
+            }
+
+            // Anneau fin qui s'illumine sur les battements
+            noFill();
+            stroke(255, 60 + beatPulse * 120);
+            strokeWeight(1.5);
+            circle(0, 0, r * 2);
+
+            pop();
+        }
+
+        // =====================================================
+        //  MODE 2 : BARRES
+        // =====================================================
+        function drawBarsMode() {
+
+            const ctx = drawingContext;
+            const base = baselineY();
+            const n = 64;
+            const gap = 4;
+            const bw = max(2, (width * 0.86) / n - gap);
+            const lineW = n * (bw + gap) - gap;
+            const x0 = (width - lineW) / 2;
+            const maxH = height * 0.42;
+            const idle = isActive ? 0 : 1;
+            const breathe = 0.5 + 0.5 * sin(frameCount * 0.04);
+
+            // Ligne de base lumineuse
+            const lg = ctx.createLinearGradient(x0, 0, x0 + lineW, 0);
+            lg.addColorStop(0, cssColor(palette(hueOffset), 0));
+            lg.addColorStop(0.5, cssColor(palette(hueOffset + 0.4), 0.9));
+            lg.addColorStop(1, cssColor(palette(hueOffset + 0.8), 0));
+            ctx.strokeStyle = lg;
+            ctx.lineWidth = 2 + beatPulse * 3;
+            ctx.beginPath();
+            ctx.moveTo(x0, base + 1);
+            ctx.lineTo(x0 + lineW, base + 1);
+            ctx.stroke();
+
+            for (let i = 0; i < n; i++) {
+
+                // Symétrique : les graves au centre, les aigus vers les bords
+                const tt = abs(i - (n - 1) / 2) / ((n - 1) / 2);
+                const idx = constrain(floor(tt * (NUM_BANDS - 1) * 0.9), 0, NUM_BANDS - 1);
+                const wobble = idle * breathe * (4 + 6 * (0.5 + 0.5 * sin(i * 0.4 + frameCount * 0.05)));
+                const h = 4 + bands[idx] * maxH + wobble;
+                const x = x0 + i * (bw + gap);
+
+                const c1 = palette(hueOffset + tt * 0.6);
+                const c2 = palette(hueOffset + tt * 0.6 + 0.25);
+
+                // Barre avec dégradé vertical
+                const grad = ctx.createLinearGradient(0, base, 0, base - h);
+                grad.addColorStop(0, cssColor(c1, 0.95));
+                grad.addColorStop(1, cssColor(c2, 1));
+                ctx.fillStyle = grad;
+                fillBar(ctx, x, base - h, bw, h);
+
+                // Reflet sous la ligne de base
+                const rh = h * 0.35;
+                const rg = ctx.createLinearGradient(0, base + 3, 0, base + 3 + rh);
+                rg.addColorStop(0, cssColor(c1, 0.28));
+                rg.addColorStop(1, cssColor(c1, 0));
+                ctx.fillStyle = rg;
+                ctx.fillRect(x, base + 3, bw, rh);
+            }
+        }
+
+        function fillBar(ctx, x, y, w, h) {
+            if (ctx.roundRect) {
+                ctx.beginPath();
+                ctx.roundRect(x, y, w, h, min(w / 2, h / 2));
+                ctx.fill();
+            } else {
+                ctx.fillRect(x, y, w, h);
+            }
+        }
+
+        // =====================================================
+        //  MODE 3 : VAGUES
+        // =====================================================
+        function drawWavesMode() {
+
+            const ctx = drawingContext;
+            const cy = height * 0.42;
+            const idle = isActive ? 0 : 1;
+            const breathe = 0.5 + 0.5 * sin(frameCount * 0.04);
+
+            push();
+            blendMode(ADD);
+
+            // Quatre vagues superposées, les graves agissent au centre
+            for (let l = 3; l >= 0; l--) {
+                const col = palette(hueOffset + l * 0.18);
+                const amp = height * 0.2 * (1 - l * 0.15);
+                const freq = 0.006 * (1 + l * 0.35);
+                const speed = 0.02 * (1 + l * 0.5);
+
+                const pts = [];
+                for (let x = 0; x <= width + 8; x += 8) {
+                    const tt = abs(x / width - 0.5) * 2;
+                    const idx = constrain(floor(pow(tt, 1.1) * (NUM_BANDS - 1) * 0.85), 0, NUM_BANDS - 1);
+                    const env = bands[idx] + bassSmooth * 0.35 * (1 - tt);
+                    const a = 8 + idle * breathe * 10 + env * amp;
+                    pts.push([x, cy + l * 14 + sin(x * freq + frameCount * speed + l * 1.7) * a]);
+                }
+
+                // Remplissage en dégradé sous la vague
+                ctx.beginPath();
+                ctx.moveTo(0, height);
+                for (let i = 0; i < pts.length; i++) {
+                    ctx.lineTo(pts[i][0], pts[i][1]);
+                }
+                ctx.lineTo(width + 8, height);
+                ctx.closePath();
+                const grad = ctx.createLinearGradient(0, cy - amp, 0, height);
+                grad.addColorStop(0, cssColor(col, 0.30));
+                grad.addColorStop(1, cssColor(col, 0));
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // Ligne lumineuse de la vague
+                noFill();
+                stroke(col[0], col[1], col[2], 210);
+                strokeWeight(2);
+                beginShape();
+                for (let i = 0; i < pts.length; i++) {
+                    vertex(pts[i][0], pts[i][1]);
+                }
+                endShape();
+            }
+
+            // Oscilloscope : la forme d'onde réelle du son, avec halo
+            if (wave.length > 0) {
+                noFill();
+                stroke(255, 230);
+                strokeWeight(2);
+                ctx.shadowBlur = 16;
+                ctx.shadowColor = cssColor(palette(hueOffset + 0.1), 0.9);
+                beginShape();
+                for (let i = 0; i < wave.length; i += 2) {
+                    vertex(map(i, 0, wave.length, 0, width), cy + wave[i] * height * 0.16);
+                }
+                endShape();
+                ctx.shadowBlur = 0;
+            }
+
+            blendMode(BLEND);
+            pop();
+        }
+
+        // =====================================================
+        //  ONDES DE CHOC ET PARTICULES
+        // =====================================================
+        function drawShockwaves() {
+
+            push();
+            noFill();
+            blendMode(ADD);
+
+            for (let i = shockwaves.length - 1; i >= 0; i--) {
+                const s = shockwaves[i];
+                s.r += 7 + s.a * 10;
+                s.a -= 0.025;
+
+                if (s.a <= 0) {
+                    shockwaves.splice(i, 1);
+                    continue;
+                }
+
+                const c = palette(hueOffset + 0.1);
+                stroke(c[0], c[1], c[2], s.a * 170);
+                strokeWeight(1 + s.a * 5);
+                circle(width / 2, centerY(), s.r * 2);
+            }
+
+            blendMode(BLEND);
+            pop();
+        }
+
+        class Particle {
+
+            constructor(x, y, vx, vy, hue) {
+                this.x = x;
+                this.y = y;
+                this.px = x;
+                this.py = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.life = 1;
+                this.decay = random(0.008, 0.02);
+                this.size = random(1.5, 3.5);
+                this.col = palette(hue);
+            }
+
+            update() {
+                this.px = this.x;
+                this.py = this.y;
+                this.vx *= 0.97;   // frottement
+                this.vy *= 0.97;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+
+            show() {
+                stroke(this.col[0], this.col[1], this.col[2], this.life * 255);
+                strokeWeight(this.size * (0.5 + this.life));
+                line(this.px, this.py, this.x, this.y);
+            }
+
+            isDead() {
+                return this.life <= 0;
+            }
+        }
+
+        // Crée des particules là où c'est logique pour le mode visuel actuel
+        function spawnExplosion(count, power) {
+
+            const cx = width / 2;
+            const cy = centerY();
+
+            for (let i = 0; i < count; i++) {
+
+                if (particles.length >= MAX_PARTICLES) {
+                    break;
+                }
+
+                const speed = random(2, 7) + power * 8;
+                let x, y, angle;
+
+                if (visualMode === "circle") {
+                    angle = random(TWO_PI);
+                    const rad = baseRadius() * (1 + bassSmooth * 0.2) + 10;
+                    x = cx + cos(angle) * rad;
+                    y = cy + sin(angle) * rad;
+                } else if (visualMode === "bars") {
+                    x = random(width * 0.1, width * 0.9);
+                    y = baselineY();
+                    angle = -HALF_PI + random(-0.6, 0.6);   // vers le haut
+                } else {
+                    x = random(width * 0.15, width * 0.85);
+                    y = height * 0.42;
+                    angle = random(TWO_PI);
+                }
+
+                particles.push(new Particle(
+                    x, y,
+                    cos(angle) * speed, sin(angle) * speed,
+                    random(1) + hueOffset
+                ));
+            }
+        }
+
+        function updateParticles() {
+
+            push();
+            noFill();
+            strokeCap(ROUND);
+            blendMode(ADD);   // les particules s'additionnent en lumière
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].show();
+
+                if (particles[i].isDead()) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            blendMode(BLEND);
+            pop();
+        }
+
+        // =====================================================
+        //  INTERFACE : mise à jour à chaque image
+        // =====================================================
+        function updateInterface() {
+
+            const loaded = Boolean(song && song.isLoaded());
+            const playing = loaded && song.isPlaying();
+
+            // Icône Play / Pause : changée seulement quand l'état change
+            if (playing !== lastPlaying) {
+                lastPlaying = playing;
+                playButton.html(playing ? ICON_PAUSE : ICON_PLAY);
+                playButton.elt.classList.toggle("playing", playing);
+                if (loaded) {
+                    ui.trackSub.textContent = playing ? "En lecture" : "En pause";
+                }
+            }
+
+            // Barre de progression et temps
+            if (loaded) {
+                const d = song.duration();
+                const t = song.currentTime();
+                const ratio = d > 0 ? constrain(t / d, 0, 1) : 0;
+
+                ui.progressFill.style.width = (ratio * 100) + "%";
+
+                const cur = formatTime(t);
+                const dur = formatTime(d);
+                if (ui.timeCur.textContent !== cur) ui.timeCur.textContent = cur;
+                if (ui.timeDur.textContent !== dur) ui.timeDur.textContent = dur;
+            }
+        }
+
+        function formatTime(sec) {
+            if (!isFinite(sec) || sec < 0) {
+                sec = 0;
+            }
+            const m = floor(sec / 60);
+            const s = floor(sec % 60);
+            return m + ":" + (s < 10 ? "0" : "") + s;
+        }
+
+        // =====================================================
+        //  MODES ET RACCOURCIS CLAVIER
+        // =====================================================
+        function setMode(m) {
+
+            if (m !== "circle" && m !== "bars" && m !== "waves") {
+                return;
+            }
+            if (m === visualMode) {
+                return;
+            }
+
+            visualMode = m;
+            modeFade = 0;   // petit fondu à l'apparition du nouveau mode
+
+            document.querySelectorAll("#modes button").forEach(function (btn) {
+                btn.classList.toggle("active", btn.dataset.mode === m);
+            });
+        }
+
+        function keyPressed() {
+
+            if (key === "1") {
+                setMode("circle");
+            } else if (key === "2") {
+                setMode("bars");
+            } else if (key === "3") {
+                setMode("waves");
+            } else if (key === "f" || key === "F") {
+                fullscreen(!fullscreen());
+            } else if (key === " " && document.activeElement === document.body) {
+                toggleSong();
+                return false;   // empêche la page de défiler
+            }
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+        }
+    </script>
+</body>
+</html>
